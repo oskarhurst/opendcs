@@ -292,7 +292,7 @@ public class CompDependsDAO extends DaoBase implements CompDependsDAI
 		{
 			timeSeriesDAO.setManualConnection(conn);
 			return (ArrayList<TimeSeriesIdentifier>)dao.getResults(
-						"SELECT " + cpCompDepends_col1 + " FROM CP_COMP_DEPENDS "
+						"SELECT " + "site_datatype_id" + " FROM CP_COMP_TS_PARM "
 					  + "WHERE COMPUTATION_ID = ?", rs ->
 					{
 						DbKey tsKey = DbKey.createDbKey(rs, 1);

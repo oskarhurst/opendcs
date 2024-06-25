@@ -169,6 +169,11 @@ public class DbComputation
 		group = null;
 		groupName = null;
 	}
+	/** Gets TimeSeriesIdentifier. */
+	public TimeSeriesIdentifier getTSID(String role) { return executive.getParmTsId(role); }
+
+	/** Gets list of Outputs. */
+	public String[] getOutputs() {return executive.getOutputNames(); }
 
 	/** Sets Computation ID. */
 	public void setId(DbKey id) { computationId = id; }

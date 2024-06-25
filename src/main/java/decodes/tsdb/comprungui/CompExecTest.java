@@ -29,24 +29,22 @@
  */
 package decodes.tsdb.comprungui;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.LineNumberReader;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.TimeZone;
-
-import opendcs.dai.CompDependsDAI;
-import opendcs.dai.ComputationDAI;
-import opendcs.dai.TimeSeriesDAI;
-import opendcs.dai.TsGroupDAI;
-import lrgs.gui.DecodesInterface;
+import decodes.consumer.DataConsumerException;
+import decodes.consumer.OutputFormatter;
+import decodes.consumer.OutputFormatterException;
+import decodes.consumer.PipeConsumer;
+import decodes.datasource.GoesPMParser;
+import decodes.datasource.RawMessage;
+import decodes.datasource.UnknownPlatformException;
+import decodes.db.*;
+import decodes.decoder.DecodedMessage;
+import decodes.decoder.Sensor;
+import decodes.decoder.TimeSeries;
+import decodes.sql.DbKey;
+import decodes.tsdb.*;
+import decodes.util.CmdLineArgs;
+import decodes.util.DecodesSettings;
+import decodes.util.TSUtil;
 import ilex.cmdline.BooleanToken;
 import ilex.cmdline.StringToken;
 import ilex.cmdline.TokenOptions;
@@ -55,44 +53,35 @@ import ilex.util.Logger;
 import ilex.util.TextUtil;
 import ilex.var.TimedVariable;
 import ilex.var.Variable;
-import decodes.consumer.DataConsumerException;
-import decodes.consumer.OutputFormatter;
-import decodes.consumer.OutputFormatterException;
-import decodes.consumer.PipeConsumer;
-import decodes.datasource.GoesPMParser;
-import decodes.datasource.RawMessage;
-import decodes.datasource.UnknownPlatformException;
-import decodes.db.DataPresentation;
-import decodes.db.Database;
-import decodes.db.InvalidDatabaseException;
-import decodes.db.PresentationGroup;
-import decodes.db.TransportMedium;
-import decodes.decoder.DecodedMessage;
-import decodes.decoder.Sensor;
-import decodes.decoder.TimeSeries;
-import decodes.sql.DbKey;
-import decodes.tsdb.*;
-import decodes.util.CmdLineArgs;
-import decodes.util.TSUtil;
+import lrgs.gui.DecodesInterface;
+import opendcs.dai.*;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.LineNumberReader;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 /**
  * This class is the "compexec" command line utility for running computations
  * without the need for triggers.
  */
-public class CompExec extends TsdbAppTemplate
+public class CompExecTest extends TsdbAppTemplate
 {
 	private String dateSpec = "yyyy/MM/dd-HH:mm:ss";
-	private StringToken tsidToken = new StringToken("T", "TSID(s)", "", 
+	private StringToken tsidToken = new StringToken("T", "TSID(s)", "",
 		TokenOptions.optSwitch|TokenOptions.optMultiple, null);
-	private StringToken groupIdToken = new StringToken("G", "Group ID", "", 
+	private StringToken groupIdToken = new StringToken("G", "Group ID", "",
 		TokenOptions.optSwitch|TokenOptions.optMultiple, null);
 	private StringToken compIdToken = new StringToken("C", "Computation ID(s)", "",
 		TokenOptions.optSwitch|TokenOptions.optMultiple, null);
-	private StringToken ctrlFileToken = new StringToken("f", "Control File", "", 
+	private StringToken ctrlFileToken = new StringToken("f", "Control File", "",
 		TokenOptions.optSwitch, null);
-	private StringToken sinceToken = new StringToken("S", "Since Time in " + dateSpec, "", 
+	private StringToken sinceToken = new StringToken("S", "Since Time in " + dateSpec, "",
 		TokenOptions.optSwitch, null);
-	private StringToken untilToken = new StringToken("U", "Until Time in " + dateSpec, "", 
+	private StringToken untilToken = new StringToken("U", "Until Time in " + dateSpec, "",
 		TokenOptions.optSwitch, null);
 	private StringToken outputFmtToken = new StringToken("o", "Output Format", "",
 		TokenOptions.optSwitch, null);
@@ -100,8 +89,12 @@ public class CompExec extends TsdbAppTemplate
 		TokenOptions.optSwitch, null);
 	private BooleanToken quietToken = new BooleanToken("q", "Quiet - no prompts or stats.", "",
 		TokenOptions.optSwitch, false);
-	private StringToken tzArg = new StringToken("Z", "Time Zone", "", 
+	private StringToken tzArg = new StringToken("Z", "Time Zone", "",
 		TokenOptions.optSwitch, "UTC");
+	private StringToken outputFile = new StringToken("of", "Output File", "",
+			TokenOptions.optSwitch, null);
+	private StringToken filenameArg = new StringToken("K", "input-file", "",
+			TokenOptions.optSwitch, null);
 
 	private HashSet<TimeSeriesIdentifier> tsids = new HashSet<TimeSeriesIdentifier>();
 //	private ArrayList<DbComputation> specifiedComps = new ArrayList<DbComputation>();
@@ -117,7 +110,7 @@ public class CompExec extends TsdbAppTemplate
 //	private CpCompDependsUpdater compDependsUpdater = null;
 
 	/** Constructor */
-	public CompExec()
+	public CompExecTest()
 	{
 		super(null);
 		sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -131,7 +124,9 @@ public class CompExec extends TsdbAppTemplate
 		computationDAO = theDb.makeComputationDAO();
 		tsGroupDAO = theDb.makeTsGroupDAO();
 		compDependsDAO = theDb.makeCompDependsDAO();
-		
+
+		CTimeSeries expected = null;
+
 		// If ctrl file provided it has everything.
 		if (ctrlFileToken.getValue() != null)
 			readControlFile(ctrlFileToken.getValue());
@@ -165,6 +160,35 @@ public class CompExec extends TsdbAppTemplate
 				System.err.println("Invalid Since Argument '" + untilToken.getValue()
 					+ "' -- format must be '" + dateSpec + " UTC");
 				System.exit(1);
+			}
+		}
+		DecodesSettings settings = DecodesSettings.instance();
+		final TimeZone tz = TimeZone.getTimeZone(settings.sqlTimeZone);
+		TsImporter importer = new TsImporter(tz, settings.siteNameTypePreference, (tsIdStr) ->
+		{
+			try
+			{
+				return timeSeriesDAO.getTimeSeriesIdentifier(tsIdStr);
+			}
+			catch (NoSuchObjectException ex)
+			{
+				try
+				{
+					TimeSeriesIdentifier tsId = theDb.makeEmptyTsId();
+					tsId.setUniqueString(tsIdStr);
+					return tsId;
+				}
+				catch(Exception ex2)
+				{
+					throw new DbIoException(String.format("No such time series and cannot create for '%'", tsIdStr), ex);
+				}
+			}
+		});
+		for(int n = filenameArg.NumberOfValues(), i=0; i<n; i++) {
+			final String filename = filenameArg.getValue(i);
+			Collection<CTimeSeries> dc = importer.readTimeSeriesFile(filename);
+			for(CTimeSeries cts : dc) {
+				expected = cts;
 			}
 		}
 		
@@ -316,6 +340,10 @@ public class CompExec extends TsdbAppTemplate
 				String msg = "Error executing comp '" + comp2run.getName() + "': " + ex;
 				warning(msg);
 			}
+
+
+			CTimeSeries algoOutput = theData.getTimeSeriesByTsidKey(comp2run.getTSID(comp2run.getOutputs()[0]));
+			System.out.println(algoOutput.equivalent(expected));
 		}
 
 		// if an output format is specified, format the data and send to stdout
@@ -401,6 +429,8 @@ public class CompExec extends TsdbAppTemplate
 		cmdLineArgs.addToken(presGrpToken);
 		cmdLineArgs.addToken(tzArg);
 		cmdLineArgs.addToken(quietToken);
+		cmdLineArgs.addToken(outputFile);
+		cmdLineArgs.addToken(filenameArg);
 
 		appNameArg.setDefaultValue("utility");
 	}
@@ -410,7 +440,7 @@ public class CompExec extends TsdbAppTemplate
 	{
 		DecodesInterface.setGUI(false);
 		DecodesInterface.silent = true;
-		CompExec app = new CompExec();
+		CompExecTest app = new CompExecTest();
 		try{ app.execute(args); }
 		catch(Exception ex)
 		{

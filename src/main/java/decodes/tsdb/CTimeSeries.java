@@ -61,6 +61,11 @@ public class CTimeSeries
     /**  TimeSeries properties */
     private Properties props = new Properties();
 
+    /** values and times are equivalent **/
+    public boolean equivalent(CTimeSeries expected){
+        return vars.toString().equals(expected.vars.toString());
+    }
+
     private static Comparator<TimedVariable> tvComparator =
         new Comparator<TimedVariable>()
         {
