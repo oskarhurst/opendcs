@@ -63,6 +63,9 @@ public class CTimeSeries
 
     /** values and times are equivalent **/
     public boolean equivalent(CTimeSeries expected){
+//        System.out.println(vars.toString());
+//        System.out.println("Expected");
+//        System.out.println(expected.vars.toString());
         return vars.toString().equals(expected.vars.toString());
     }
 
