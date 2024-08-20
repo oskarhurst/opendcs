@@ -6,6 +6,7 @@
           revision="${version}"
           e:snapshot="a${snapshot.time}"/>
     <configurations defaultconf="runtime" defaultconfmapping="runtime->default">
+        <conf name="annotations_runtime" visibility="public"/>
         <conf name="runtime" visibility="public"/>
         <conf name="runtime_last" visibility="public"/>
         <conf name="test"  visibility="private"/>
@@ -19,6 +20,8 @@
     <publications>
         <artifact name="opendcs" type="pom" conf="runtime" ext="pom"/>
         <artifact name="opendcs" type="jar" conf="runtime" ext="jar"/>
+        <artifact name="opendcs-annotations" type="pom" conf="annotations_runtime" ext="pom"/>
+        <artifact name="opendcs-annotations" type="jar" conf="annotations_runtime" ext="jar"/>
     </publications>
     <dependencies>
         <dependency org="com.oracle.ojdbc" name="ojdbc8" rev="19.3.0.0"/>
@@ -79,7 +82,18 @@
         </dependency>
         <dependency org="mil.army.usace.hec" name="hec-cwms-ratings-core" rev="1.1.0"/>
         <dependency org="org.slf4j" name="slf4j-api" rev="${slf4j.version}"/>
-        <dependency org="io.javalin" name="javalin" rev="4.6.8" />
+
+        <dependency org="org.eclipse.jetty" name="jetty-jsp" rev="${jetty.jsp.version}"/>
+        <dependency org="org.eclipse.jetty" name="jetty-annotations" rev="${jetty.version}"/>
+        <dependency org="org.eclipse.jetty" name="jetty-server" rev="${jetty.version}"/>
+        <dependency org="org.eclipse.jetty" name="jetty-servlets" rev="${jetty.version}"/>
+        <dependency org="org.eclipse.jetty" name="jetty-servlet" rev="${jetty.version}"/>
+        <dependency org="org.eclipse.jetty" name="jetty-webapp" rev="${jetty.version}"/>
+        <dependency org="javax.servlet" name="javax.servlet-api" rev="${servlet/api.version}"/>
+        <dependency org="org.glassfish.jersey.containers" name="jersey-container-servlet" rev="${jersey.version}"/>
+        <dependency org="org.glassfish.jersey.inject" name="jersey-hk2" rev="${jersey.version}"/>
+        <dependency org="javax" name="javaee-api" rev="7.0"/>
+
         <dependency org="org.jdbi" name="jdbi3-core" rev="3.38.2"/>
         <dependency org="org.jdbi" name="jdbi3-sqlobject" rev="3.38.2"/>
         <dependency org="org.jdbi" name="jdbi3-postgres" rev="3.38.2"/>

@@ -285,9 +285,23 @@ more information about each.
                  author="true"
                  version="true"
                  use="true"
-                 windowTitle="OpenDCS API"
-                 classpathref="runtime.classpath">
+                 windowTitle="OpenDCS API">
+            <classpath>
+                <path refid="runtime.classpath"/>
+                <pathelement path="${annotations.classes}"/>
+            </classpath>
             <fileset dir="${src.dir}"/>
+            <tag name="todo" scope="all" description="To do:"/>
+        </javadoc>
+        <javadoc destdir="${build.dir}/javadocs-annotations"
+                 author="true"
+                 version="true"
+                 use="true"
+                 windowTitle="OpenDCS API Annotations">
+            <classpath>
+                <pathelement path="${annotations.classes}"/>
+            </classpath>
+            <fileset dir="${annotations.main.dir}"/>
             <tag name="todo" scope="all" description="To do:"/>
         </javadoc>
     </target>
@@ -297,11 +311,22 @@ more information about each.
         <mkdir dir="${build.release.dir}"/>
         <copy file="${dist.jar}" tofile="${build.release.dir}/opendcs-${version}.jar"/>
         <copy file="${build.dir}/lib/opendcs.pom" tofile="${build.release.dir}/opendcs-${version}.pom"/>
+        <!-- main bundle -->
         <jar jarfile="${build.release.dir}/opendcs-${version}-javadoc.jar"
              basedir="${build.dir}/javadocs"
              update="true"/>
         <jar jarfile="${build.release.dir}/opendcs-${version}-sources.jar">
             <fileset dir="${src.dir}" includes="**/*.java"/>
+        </jar>
+        <!-- annotations bundle -->
+        <property name="annotations.base" value="opendcs-annotations-${version}"/>
+        <copy file="${annotations.jar}" tofile="${build.release.dir}/${annotations.base}.jar"/>
+        <copy file="${build.dir}/lib/opendcs-annotations.pom" tofile="${build.release.dir}/${annotations.base}.pom"/>
+        <jar jarfile="${build.release.dir}/${annotations.base}-javadoc.jar"
+             basedir="${build.dir}/javadocs-annotations"
+             update="true"/>
+        <jar jarfile="${build.release.dir}/${annotations.base}-sources.jar">
+            <fileset dir="${annotations.main.dir}"/>
         </jar>
         <available property="have.gpg" file="gpg" filepath="${PATH}"/>
         <if>
@@ -317,8 +342,16 @@ more information about each.
                 <gpgsignfile target="opendcs-${version}.jar"/>
                 <gpgsignfile target="opendcs-${version}-javadoc.jar"/>
                 <gpgsignfile target="opendcs-${version}-sources.jar"/>
-                <jar jarfile="${build.release.dir}/bundle.jar">
-                    <fileset dir="${build.release.dir}" excludes="bundle.jar"/>
+                <jar jarfile="${build.release.dir}/bundle-core.jar">
+                    <fileset dir="${build.release.dir}" excludes="bundle*,opendcs-annotations*"/>
+                </jar>
+
+                <gpgsignfile target="${annotations.base}.jar"/>
+                <gpgsignfile target="${annotations.base}-sources.jar"/>
+                <gpgsignfile target="${annotations.base}-javadoc.jar"/>
+                <gpgsignfile target="${annotations.base}.pom"/>
+                <jar jarfile="${build.release.dir}/bundle-annotations.jar">
+                    <fileset dir="${build.release.dir}" excludes="bundle*,opendcs-${version}*"/>
                 </jar>
             </else>
         </if>
@@ -773,6 +806,46 @@ more information about each.
             </fileset>
         </chmod>
         <mkdir dir="${build.dir}/run"/>
+        <if>
+            <isset property="opendcs.profile"/>
+            <then>
+                <basename property="opendcs.profile.name" file="${opendcs.profile}" suffix=".profile"/>
+            </then>
+            <else>
+                <property name="opendcs.profile.name" value="default"/>
+            </else>
+        </if>
+        <if>
+            <and>
+                <islessthan arg1="${java.specification.version}" arg2="11"/>
+                <isset property="opendcs.jfr"/>
+            </and>
+            <then>
+                <property name="jfrOpts" value=""/>
+                <echo level="warning">Can only run Java Flight recorder on JDK 11 or above</echo>
+            </then>
+            <elseif>
+                <isset property="opendcs.jfr"/>
+                <then>
+                    <property name="can_jfr" value="true"/>
+                    <property name="jfrOpts"
+                                value="-XX:StartFlightRecording=disk=true,dumponexit=true,filename=${build.dir}/run/${opendcs.app}.${opendcs.profile.name}.recording.jfr,settings=profile"/>
+                </then>
+            </elseif>
+            <else>
+                <property name="jfrOpts" value=""/>
+            </else>
+        </if>
+
+        <condition property="debugOpts"
+                   value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}"
+                   else="">
+            <isset property="debugPort"/>
+        </condition>
+
+        <property name="decj_opts" value="${debugOpts} ${jfrOpts}"/>
+        <echo message="with opts: ${decj_opts}"/>
+
         <exec executable="${stage.dir}/bin/${opendcs.app}" osfamily="unix">
             <env key="DCSTOOL_HOME" value="${stage.absolute.dir}"/>
             <env key="DECODES_INSTALL_DIR" value="${stage.absolute.dir}"/>
@@ -780,9 +853,7 @@ more information about each.
             <arg value="-l"/><arg value="/dev/stdout"/>
             <arg if:set="opendcs.profile" value="-P"/>
             <arg if:set="opendcs.profile" value="${opendcs.profile}"/>
-            <env if:set="debugPort"
-                 key="DECJ_OPTS"
-                 value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}"/>
+            <env key="DECJ_OPTS" value="${decj_opts}"/>
         </exec>
         <exec executable="${stage.absolute.dir}/bin/${opendcs.app}.bat" osfamily="windows" vmlauncher="false">
             <env key="DCSTOOL_HOME" value="${stage.absolute.dir}"/>
@@ -791,9 +862,7 @@ more information about each.
             <arg value="-l"/><arg value="CON:"/>
             <arg if:set="opendcs.profile" value="-P"/>
             <arg if:set="opendcs.profile" value="${opendcs.profile}"/>
-            <env if:set="debugPort"
-                 key="DECJ_OPTS"
-                 value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=${debugPort}"/>
+            <env key="DECJ_OPTS" value="${decj_opts}"/>
         </exec>
     </target>
 </project>
