@@ -1,0 +1,31 @@
+/* 
+ * Copyright (c) 2018
+ * United States Army Corps of Engineers - Hydrologic Engineering Center (USACE/HEC)
+ * All Rights Reserved.  USACE PROPRIETARY/CONFIDENTIAL.
+ * Source may not be released without written approval from HEC
+ */
+package decodes.cwms.newresevap;
+
+/**
+ * ResEvapException is used to communicate errors occurring in the
+ * use of the java ResEvap computations 
+ *
+ * @author  Richard Rachiele
+ * @version 1.1 June  2015
+ * @see HecMath
+ */
+
+public class ResEvapException extends Exception
+{
+    public ResEvapException() {
+    }
+
+    public ResEvapException(Exception e) {
+        super(e.toString());
+    }
+
+    public ResEvapException(String message) {
+        super(message);
+    }
+
+}
