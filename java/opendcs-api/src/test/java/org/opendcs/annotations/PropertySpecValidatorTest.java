@@ -177,120 +177,111 @@ public class PropertySpecValidatorTest
     private Map<String, String> properties;
     
     @BeforeEach
-    public void setup() 
+    public void setup()
     {
         validator = new PropertySpecValidator(TestAlgorithm.class);
         properties = new HashMap<>();
     }
-    
-    @Test
-    public void testValidateWithAllRequirementsSatisfied() 
+
+    /**
+     * Returns a valid baseline property map for TestAlgorithm with all groups satisfied:
+     * - apiUrl (required field)
+     * - username (ONE_OF auth)
+     * - host, port, database (ALL_REQUIRED database)
+     * - email (AT_LEAST_ONE contact)
+     * - proxy group satisfied by omission (ALL_OR_NONE)
+     */
+    private static Map<String, String> validBaseProperties()
     {
-        // Satisfy all requirements
-        properties.put("apiUrl", "https://api.example.com");
-        properties.put("username", "user123"); // ONE_OF auth
-        properties.put("host", "localhost");   // ALL_REQUIRED database
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        properties.put("email", "test@example.com"); // AT_LEAST_ONE contact
-        // proxy group satisfied by providing none (ALL_OR_NONE)
-        
+        Map<String, String> props = new HashMap<>();
+        props.put("apiUrl", "https://api.example.com");
+        props.put("username", "user123");
+        props.put("host", "localhost");
+        props.put("port", "5432");
+        props.put("database", "mydb");
+        props.put("email", "test@example.com");
+        return props;
+    }
+
+    @Test
+    public void testValidateWithAllRequirementsSatisfied()
+    {
+        properties = validBaseProperties();
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertTrue(result.isValid());
         Assertions.assertTrue(result.getErrors().isEmpty());
     }
     
     @Test
-    public void testValidateWithMissingRequired() 
+    public void testValidateWithMissingRequired()
     {
-        // Missing required apiUrl
-        properties.put("username", "user123");
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        properties.put("email", "test@example.com");
-        
+        properties = validBaseProperties();
+        properties.remove("apiUrl");
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertFalse(result.isValid());
         Assertions.assertFalse(result.getErrors().isEmpty());
-        
+
         String errorMessage = result.getErrorMessage();
         Assertions.assertTrue(errorMessage.contains("apiUrl"));
     }
     
     @Test
-    public void testValidateOneOfViolation() 
+    public void testValidateOneOfViolation()
     {
-        properties.put("apiUrl", "https://api.example.com");
+        properties = validBaseProperties();
         // Provide two auth methods (violates ONE_OF)
-        properties.put("username", "user123");
         properties.put("apiKey", "key456");
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        properties.put("email", "test@example.com");
-        
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertFalse(result.isValid());
-        
+
         String errorMessage = result.getErrorMessage();
         Assertions.assertTrue(errorMessage.contains("auth"));
         Assertions.assertTrue(errorMessage.contains("exactly one"));
     }
-    
+
     @Test
-    public void testValidateAllRequiredViolation() 
+    public void testValidateAllRequiredViolation()
     {
-        properties.put("apiUrl", "https://api.example.com");
-        properties.put("username", "user123");
-        // Missing some database properties (violates ALL_REQUIRED)
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        // missing 'database'
-        properties.put("email", "test@example.com");
-        
+        properties = validBaseProperties();
+        // Remove one database property (violates ALL_REQUIRED)
+        properties.remove("database");
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertFalse(result.isValid());
-        
+
         String errorMessage = result.getErrorMessage();
         Assertions.assertTrue(errorMessage.contains("database"));
         Assertions.assertTrue(errorMessage.contains("all"));
     }
-    
+
     @Test
-    public void testValidateAtLeastOneViolation() 
+    public void testValidateAtLeastOneViolation()
     {
-        properties.put("apiUrl", "https://api.example.com");
-        properties.put("username", "user123");
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        // No contact method provided (violates AT_LEAST_ONE)
-        
+        properties = validBaseProperties();
+        // Remove contact method (violates AT_LEAST_ONE)
+        properties.remove("email");
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertFalse(result.isValid());
-        
+
         String errorMessage = result.getErrorMessage();
         Assertions.assertTrue(errorMessage.contains("contact"));
         Assertions.assertTrue(errorMessage.contains("at least one"));
     }
-    
+
     @Test
-    public void testValidateAllOrNoneViolation() 
+    public void testValidateAllOrNoneViolation()
     {
-        properties.put("apiUrl", "https://api.example.com");
-        properties.put("username", "user123");
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        properties.put("email", "test@example.com");
+        properties = validBaseProperties();
         // Only partial proxy settings (violates ALL_OR_NONE)
         properties.put("proxyHost", "proxy.example.com");
-        // missing proxyPort
-        
+
         PropertySpecValidator.ValidationResult result = validator.validate(properties);
         Assertions.assertFalse(result.isValid());
-        
+
         String errorMessage = result.getErrorMessage();
         Assertions.assertTrue(errorMessage.contains("proxy"));
         Assertions.assertTrue(errorMessage.contains("all or none"));
@@ -337,49 +328,41 @@ public class PropertySpecValidatorTest
     }
     
     @Test
-    public void testIsMissingPropertyViolatingRequirements() 
+    public void testIsMissingPropertyViolatingRequirements()
     {
-        // Set up some valid properties
-        properties.put("apiUrl", "https://api.example.com");
-        properties.put("username", "user123");
-        properties.put("host", "localhost");
-        properties.put("port", "5432");
-        properties.put("database", "mydb");
-        properties.put("email", "test@example.com");
-        
+        properties = validBaseProperties();
+
         // Test missing required property - should violate
         Assertions.assertTrue(validator.isMissingPropertyViolatingRequirements("apiUrl", new HashMap<>()));
-        
+
         // Test property with value - should not violate
         Assertions.assertFalse(validator.isMissingPropertyViolatingRequirements("apiUrl", properties));
-        
+
         // Test missing property in satisfied ONE_OF group - should not violate
         Assertions.assertFalse(validator.isMissingPropertyViolatingRequirements("apiKey", properties));
-        
+
         // Test missing property in unsatisfied ALL_REQUIRED group - should violate
         Map<String, String> partialProps = new HashMap<>();
         partialProps.put("host", "localhost");
-        // missing port and database
         Assertions.assertTrue(validator.isMissingPropertyViolatingRequirements("port", partialProps));
-        
+
         // Test optional property - should not violate
         Assertions.assertFalse(validator.isMissingPropertyViolatingRequirements("optional", properties));
     }
     
     @Test
-    public void testStaticValidateClass() 
+    public void testStaticValidateClass()
     {
-        Map<String, String> props = new HashMap<>();
-        props.put("apiUrl", "https://api.example.com");
+        Map<String, String> props = validBaseProperties();
+        // Use different valid choices to verify alternatives work
+        props.remove("username");
         props.put("apiKey", "key123");
-        props.put("host", "localhost");
-        props.put("port", "5432");
-        props.put("database", "mydb");
+        props.remove("email");
         props.put("phone", "555-1234");
-        
-        PropertySpecValidator.ValidationResult result = 
+
+        PropertySpecValidator.ValidationResult result =
             PropertySpecValidator.validateClass(TestAlgorithm.class, props);
-        
+
         Assertions.assertTrue(result.isValid());
     }
     
